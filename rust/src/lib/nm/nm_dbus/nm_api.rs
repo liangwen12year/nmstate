@@ -117,9 +117,11 @@ impl<'a> NmApi<'a> {
 
     pub fn connection_deactivate(&mut self, uuid: &str) -> Result<(), NmError> {
         debug!("connection_deactivate: {}", uuid);
+        log::info!("------connection_deactivate called");
         self.extend_timeout_if_required()?;
         if let Ok(nm_ac) = get_nm_ac_obj_path_by_uuid(&self.dbus, uuid) {
             if !nm_ac.is_empty() {
+                log::info!("------dbus connection_deactivate called");
                 self.dbus.connection_deactivate(&nm_ac)?;
             }
         }
@@ -407,8 +409,14 @@ fn get_nm_ac_obj_path_by_uuid(
     uuid: &str,
 ) -> Result<String, NmError> {
     let nm_ac_obj_paths = dbus.active_connections()?;
-
+    log::info!("-----nm_ac_obj_pathss: {:?}", nm_ac_obj_paths);
     for nm_ac_obj_path in nm_ac_obj_paths {
+        log::info!(
+            "-----nm_ac_obj_path {} --obj_path_uuid_get-- {} --uuid-- {}",
+            nm_ac_obj_path,
+            nm_ac_obj_path_uuid_get(&dbus.connection, &nm_ac_obj_path)?,
+            uuid
+        );
         if nm_ac_obj_path_uuid_get(&dbus.connection, &nm_ac_obj_path)? == uuid {
             return Ok(nm_ac_obj_path);
         }

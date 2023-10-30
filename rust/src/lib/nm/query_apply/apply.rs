@@ -133,6 +133,10 @@ pub(crate) fn nm_apply(
         nm_conns_to_activate.as_slice(),
         activated_nm_conns.as_slice(),
     );
+    log::info!(
+        "-----nm_conns_to_deactivate_first: {:?}",
+        nm_conns_to_deactivate_first
+    );
     deactivate_nm_profiles(
         &mut nm_api,
         nm_conns_to_deactivate_first.as_slice(),
@@ -158,6 +162,7 @@ pub(crate) fn nm_apply(
     }
 
     activate_nm_profiles(&mut nm_api, nm_conns_to_activate.as_slice())?;
+    log::info!("-----nm_conns_to_deactivate: {:?}", nm_conns_to_deactivate);
 
     deactivate_nm_profiles(&mut nm_api, nm_conns_to_deactivate.as_slice())?;
 

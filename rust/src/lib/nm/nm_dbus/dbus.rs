@@ -33,9 +33,9 @@ const NM_SETTINGS_CREATE2_FLAGS_TO_DISK: u32 = 1;
 const NM_SETTINGS_CREATE2_FLAGS_IN_MEMORY: u32 = 2;
 const NM_SETTINGS_CREATE2_FLAGS_BLOCK_AUTOCONNECT: u32 = 32;
 
-const NM_SETTINGS_UPDATE2_FLAGS_TO_DISK: u32 = 1;
-const NM_SETTINGS_UPDATE2_FLAGS_IN_MEMORY: u32 = 2;
-const NM_SETTINGS_UPDATE2_FLAGS_BLOCK_AUTOCONNECT: u32 = 32;
+const NM_SETTINGS_UPDATE2_FLAG_TO_DISK: u32 = 1;
+const NM_SETTINGS_UPDATE2_FLAG_IN_MEMORY: u32 = 2;
+const NM_SETTINGS_UPDATE2_FLAG_BLOCK_AUTOCONNECT: u32 = 32;
 
 pub(crate) struct NmDbus<'a> {
     pub(crate) connection: zbus::Connection,
@@ -223,11 +223,11 @@ impl<'a> NmDbus<'a> {
             con_obj_path,
             NM_DBUS_INTERFACE_SETTING,
         )?;
-        let flags = NM_SETTINGS_UPDATE2_FLAGS_BLOCK_AUTOCONNECT
+        let flags = NM_SETTINGS_UPDATE2_FLAG_BLOCK_AUTOCONNECT
             + if memory_only {
-                NM_SETTINGS_UPDATE2_FLAGS_IN_MEMORY
+                NM_SETTINGS_UPDATE2_FLAG_IN_MEMORY
             } else {
-                NM_SETTINGS_UPDATE2_FLAGS_TO_DISK
+                NM_SETTINGS_UPDATE2_FLAG_TO_DISK
             };
         proxy.call::<(
                 NmConnectionDbusValue,
