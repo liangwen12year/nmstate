@@ -467,28 +467,6 @@ impl MergedRoutes {
                         ),
                     ));
                 }
-                if rt.is_ipv6()
-                    && ifaces_with_ipv6_disabled.contains(&via.as_str())
-                {
-                    return Err(NmstateError::new(
-                        ErrorKind::InvalidArgument,
-                        format!(
-                            "The next hop interface of desired Route '{rt}' \
-                            has been marked as IPv6 disabled"
-                        ),
-                    ));
-                }
-                if (!rt.is_ipv6())
-                    && ifaces_with_ipv4_disabled.contains(&via.as_str())
-                {
-                    return Err(NmstateError::new(
-                        ErrorKind::InvalidArgument,
-                        format!(
-                            "The next hop interface of desired Route '{rt}' \
-                            has been marked as IPv4 disabled"
-                        ),
-                    ));
-                }
                 changed_ifaces.insert(via.as_str());
             } else if rt.route_type.is_some() {
                 changed_ifaces.insert(LOOPBACK_IFACE_NAME);
