@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     BaseInterface, ErrorKind, Interface, InterfaceType, Interfaces,
     MergedInterfaces, NmstateError, SrIovConfig,
 };
+use std::collections::hash_map::Iter;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -70,6 +72,74 @@ pub struct EthernetInterface {
     /// When applying, the [VethConfig] is only valid when
     /// [BaseInterface.iface_type] is set to [InterfaceType::Veth] explicitly.
     pub veth: Option<VethConfig>,
+    /// The description of combined ethernet settings
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        default,
+        deserialize_with = "parse_ethernet_description"
+    )]
+    pub description: Option<EthernetDescription>,
+}
+
+impl<'a> IntoIterator for &'a EthernetDescription {
+    type Item = (&'a String, &'a String);
+    type IntoIter = Iter<'a, String, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
+fn parse_ethernet_description<'de, D>(
+    deserializer: D,
+) -> Result<Option<EthernetDescription>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(None)
+}
+
+impl Serialize for EthernetDescription {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let ordered: BTreeMap<_, _> = self.data.iter().collect();
+        ordered.serialize(serializer)
+    }
+}
+
+#[derive(Deserialize, Debug, Eq, PartialEq, Clone, Default)]
+#[serde(from = "HashMap<String, String>")]
+#[non_exhaustive]
+pub struct EthernetDescription {
+    data: HashMap<String, String>,
+}
+
+impl From<HashMap<String, String>> for EthernetDescription {
+    fn from(data: HashMap<String, String>) -> Self {
+        Self { data }
+    }
+}
+
+impl From<EthernetDescription> for HashMap<String, String> {
+    fn from(c: EthernetDescription) -> Self {
+        c.data
+    }
+}
+
+impl EthernetDescription {
+    pub fn remove(&mut self, key: &str) -> Option<String> {
+        self.data.remove(key)
+    }
+
+    pub fn insert(&mut self, key: String, value: String) -> Option<String> {
+        self.data.insert(key, value)
+    }
+
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.data.get(key)
+    }
 }
 
 impl Default for EthernetInterface {
@@ -80,6 +150,7 @@ impl Default for EthernetInterface {
             base,
             ethernet: None,
             veth: None,
+            description: None,
         }
     }
 }
