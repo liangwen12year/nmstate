@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 use serde::ser;
+use serde::ser::Error as SerError;
 use serde_yaml;
 use std::io;
-use std::string::FromUtf8Error;
-use serde::ser::Error as SerError; // Import the SerError trait
+use std::string::FromUtf8Error; // Import the SerError trait
 
-pub fn to_string_with_error_count<T>(value: &T) -> Result<(String, usize), serde_yaml::Error>
+pub fn to_string_with_error_count<T>(
+    value: &T,
+) -> Result<(String, usize), serde_yaml::Error>
 where
     T: ?Sized + ser::Serialize,
 {
@@ -30,7 +32,10 @@ where
         }
     }
 
-    let mut writer = ErrorCountingWriter { writer: &mut vec, error_count: &mut error_count };
+    let mut writer = ErrorCountingWriter {
+        writer: &mut vec,
+        error_count: &mut error_count,
+    };
     serde_yaml::to_writer(&mut writer, value)?;
     let yaml_string = String::from_utf8(vec).map_err(convert_utf8_error)?;
 
@@ -45,6 +50,6 @@ use crate::{error::CliError, state::state_from_file};
 
 pub(crate) fn format(state_file: &str) -> Result<String, CliError> {
     let state = state_from_file(state_file)?;
-    let (yaml_string, error_count) = to_string_with_error_count(&state)?;
+    let (yaml_string, _error_count) = to_string_with_error_count(&state)?;
     Ok(yaml_string)
 }

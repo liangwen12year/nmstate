@@ -19,6 +19,7 @@ path = "ncl.rs"
 [dependencies]
 nmstate = { workspace = true }
 serde_yaml = { workspace = true }
+yaml-rust = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 env_logger = { workspace = true }

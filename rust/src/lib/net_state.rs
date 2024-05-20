@@ -3,7 +3,10 @@
 #[cfg(not(feature = "gen_conf"))]
 use std::collections::HashMap;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_yaml;
+use yaml_rust::YamlLoader;
 
 use crate::{
     DnsState, ErrorKind, HostNameState, Interface, Interfaces, MergedDnsState,
@@ -210,25 +213,61 @@ impl NetworkState {
 
     /// Wrapping function of [serde_json::from_str()] with error mapped to
     /// [NmstateError].
-    pub fn new_from_json(net_state_json: &str) -> Result<Self, NmstateError> {
+    pub fn new_from_json<T>(net_state_json: &str) -> Result<T, NmstateError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let error_count = 0;
+
         match serde_json::from_str(net_state_json) {
             Ok(s) => Ok(s),
-            Err(e) => Err(NmstateError::new(
+            Err(e) => Err(NmstateError::new_with_count(
                 ErrorKind::InvalidArgument,
                 format!("Invalid JSON string: {e}"),
+                error_count + 1, // Increment error count to 1
             )),
         }
     }
 
-    /// Wrapping function of [serde_yaml::from_str()] with error mapped to
-    /// [NmstateError].
-    pub fn new_from_yaml(net_state_yaml: &str) -> Result<Self, NmstateError> {
-        match serde_yaml::from_str(net_state_yaml) {
-            Ok(s) => Ok(s),
-            Err(e) => Err(NmstateError::new(
-                ErrorKind::InvalidArgument,
-                format!("Invalid YAML string: {e}"),
-            )),
+    /// Wrapping function of [yaml_rust::YamlLoader] with error mapped to
+    /// [NmstateError] and error count.
+    pub fn new_from_yaml<T>(net_state_yaml: &str) -> Result<T, NmstateError>
+    where
+        T: DeserializeOwned,
+    {
+        let mut error_count = 0;
+        let mut errors = Vec::new();
+
+        match YamlLoader::load_from_str(net_state_yaml) {
+            Ok(docs) => {
+                if docs.is_empty() {
+                    error_count += 1;
+                    errors.push("Empty document".to_string());
+                }
+                // Assuming we need to convert Yaml to the desired type T
+                // This part needs manual implementation
+                match serde_yaml::from_str::<T>(net_state_yaml) {
+                    Ok(s) => Ok(s),
+                    Err(e) => {
+                        error_count += 1;
+                        errors.push(format!("Deserialization error: {e}"));
+                        Err(NmstateError::new_with_count(
+                            ErrorKind::InvalidArgument,
+                            format!("Invalid YAML string: {e}"),
+                            error_count,
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                error_count += 1;
+                errors.push(format!("Parsing error: {e}"));
+                Err(NmstateError::new_with_count(
+                    ErrorKind::InvalidArgument,
+                    format!("Invalid YAML string: {e}"),
+                    error_count,
+                ))
+            }
         }
     }
 

@@ -4,6 +4,7 @@ use std::ffi::{CStr, CString};
 use std::time::SystemTime;
 
 use libc::{c_char, c_int};
+use nmstate::NetworkState;
 
 use crate::{init_logger, NMSTATE_FAIL, NMSTATE_PASS};
 
@@ -68,17 +69,19 @@ pub extern "C" fn nmstate_generate_configurations(
         }
     };
 
-    let net_state = match nmstate::NetworkState::new_from_yaml(net_state_str) {
-        Ok(n) => n,
-        Err(e) => {
-            unsafe {
-                *err_msg = CString::new(e.msg()).unwrap().into_raw();
-                *err_kind =
-                    CString::new(format!("{}", &e.kind())).unwrap().into_raw();
+    let net_state: NetworkState =
+        match nmstate::NetworkState::new_from_yaml(net_state_str) {
+            Ok(n) => n,
+            Err(e) => {
+                unsafe {
+                    *err_msg = CString::new(e.msg()).unwrap().into_raw();
+                    *err_kind = CString::new(format!("{}", &e.kind()))
+                        .unwrap()
+                        .into_raw();
+                }
+                return NMSTATE_FAIL;
             }
-            return NMSTATE_FAIL;
-        }
-    };
+        };
 
     let input_is_json =
         serde_json::from_str::<serde_json::Value>(net_state_str).is_ok();

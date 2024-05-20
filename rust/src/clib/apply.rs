@@ -4,6 +4,7 @@ use std::ffi::{CStr, CString};
 use std::time::SystemTime;
 
 use libc::{c_char, c_int};
+use nmstate::NetworkState;
 
 use crate::{
     init_logger,
@@ -73,7 +74,7 @@ pub extern "C" fn nmstate_net_state_apply(
         }
     };
 
-    let mut net_state =
+    let mut net_state: NetworkState =
         match nmstate::NetworkState::new_from_yaml(net_state_str) {
             Ok(n) => n,
             Err(e) => {

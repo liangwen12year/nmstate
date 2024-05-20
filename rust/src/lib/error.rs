@@ -54,11 +54,20 @@ impl std::fmt::Display for NmstateError {
         if self.kind == ErrorKind::PolicyError {
             write!(
                 f,
-                "{}: {}\n| {}\n| {:.<4$}^",
-                self.kind, self.msg, self.line, "", self.position
+                "{}: {}\n| {}\n| {:.<5$}^\nError count: {}",
+                self.kind,
+                self.msg,
+                self.line,
+                "",
+                self.position,
+                self.error_count
             )
         } else {
-            write!(f, "{}: {}", self.kind, self.msg)
+            write!(
+                f,
+                "{}: {}\nError count: {}",
+                self.kind, self.msg, self.error_count
+            )
         }
     }
 }
@@ -72,13 +81,25 @@ pub struct NmstateError {
     msg: String,
     line: String,
     position: usize,
+    error_count: usize,
 }
 
 impl NmstateError {
+    // Constructor with default error_count = 1
     pub fn new(kind: ErrorKind, msg: String) -> Self {
+        Self::new_with_count(kind, msg, 1)
+    }
+
+    // Constructor with specified error_count
+    pub fn new_with_count(
+        kind: ErrorKind,
+        msg: String,
+        error_count: usize,
+    ) -> Self {
         Self {
             kind,
             msg,
+            error_count,
             ..Default::default()
         }
     }
@@ -89,6 +110,7 @@ impl NmstateError {
             line: line.to_string(),
             msg,
             position,
+            error_count: 0, // or provide a way to set this if needed
         }
     }
 
