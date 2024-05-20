@@ -3,7 +3,10 @@
 #[cfg(not(feature = "gen_conf"))]
 use std::collections::HashMap;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_yaml;
+use yaml_rust::{Yaml, YamlEmitter, YamlLoader};
 
 use crate::{
     DnsState, ErrorKind, HostNameState, Interface, Interfaces, MergedDnsState,
@@ -11,6 +14,47 @@ use crate::{
     MergedOvsDbGlobalConfig, MergedRouteRules, MergedRoutes, NmstateError,
     OvnConfiguration, OvsDbGlobalConfig, RouteRules, Routes,
 };
+
+/// Validate the YAML structure and collect errors
+fn validate_yaml_structure(
+    yaml: &Yaml,
+    errors: &mut Vec<String>,
+    path: String,
+) {
+    match yaml {
+        Yaml::Hash(hash) => {
+            for (key, value) in hash {
+                let key_str = key.as_str().unwrap_or("<unknown key>");
+                let new_path = format!("{}/{}", path, key_str);
+                validate_yaml_structure(value, errors, new_path);
+            }
+        }
+        Yaml::Array(array) => {
+            for (index, value) in array.iter().enumerate() {
+                let new_path = format!("{}/[{}]", path, index);
+                validate_yaml_structure(value, errors, new_path);
+            }
+        }
+        Yaml::String(s) => {
+            // Example validation: Check if string is in a specific format
+            if path.ends_with("mtu") && !s.parse::<i32>().is_ok() {
+                errors.push(format!("Invalid mtu value at {}: {}", path, s));
+            } else if path.ends_with("enabled") && !s.parse::<i32>().is_ok() {
+                errors
+                    .push(format!("Invalid enabled value at {}: {}", path, s));
+            }
+        }
+        Yaml::Integer(i) => {
+            // Example validation: Check if integer is in the expected range
+            if path.ends_with("state") && (*i != 1 && *i != 2) {
+                errors.push(format!("Invalid state value at {}: {}", path, i));
+            } else if path.ends_with("dhcp") && (*i != 0 && *i != 1) {
+                errors.push(format!("Invalid dhcp value at {}: {}", path, i));
+            }
+        }
+        _ => {}
+    }
+}
 
 /// The [NetworkState] represents the whole network state including both
 /// kernel status and configurations provides by backends(NetworkManager,
@@ -210,25 +254,75 @@ impl NetworkState {
 
     /// Wrapping function of [serde_json::from_str()] with error mapped to
     /// [NmstateError].
-    pub fn new_from_json(net_state_json: &str) -> Result<Self, NmstateError> {
+    pub fn new_from_json<T>(net_state_json: &str) -> Result<T, NmstateError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let error_count = 0;
+
         match serde_json::from_str(net_state_json) {
             Ok(s) => Ok(s),
-            Err(e) => Err(NmstateError::new(
+            Err(e) => Err(NmstateError::new_with_count(
                 ErrorKind::InvalidArgument,
                 format!("Invalid JSON string: {e}"),
+                error_count + 1, // Increment error count to 1
             )),
         }
     }
 
-    /// Wrapping function of [serde_yaml::from_str()] with error mapped to
-    /// [NmstateError].
-    pub fn new_from_yaml(net_state_yaml: &str) -> Result<Self, NmstateError> {
-        match serde_yaml::from_str(net_state_yaml) {
-            Ok(s) => Ok(s),
-            Err(e) => Err(NmstateError::new(
+    /// Wrapping function of [yaml_rust::YamlLoader] with error mapped to
+    /// [NmstateError] and error count.
+    pub fn new_from_yaml<T>(net_state_yaml: &str) -> Result<T, NmstateError>
+    where
+        T: DeserializeOwned,
+    {
+        let mut error_count = 0;
+        let mut errors = Vec::new();
+
+        // First pass: Basic parsing to find syntax errors
+        let docs = match YamlLoader::load_from_str(net_state_yaml) {
+            Ok(docs) => {
+                if docs.is_empty() {
+                    error_count += 1;
+                    errors.push("Empty document".to_string());
+                }
+                docs
+            }
+            Err(e) => {
+                error_count += 1;
+                errors.push(format!("Parsing error: {}", e));
+                Vec::new() // Return an empty vector on parsing error
+            }
+        };
+
+        // Validate each document
+        for (index, doc) in docs.iter().enumerate() {
+            let path = format!("[{}]", index);
+            validate_yaml_structure(doc, &mut errors, path);
+        }
+
+        // If there were validation errors, return them
+        if !errors.is_empty() {
+            error_count += errors.len();
+            return Err(NmstateError::new_with_multiple_errors(
                 ErrorKind::InvalidArgument,
-                format!("Invalid YAML string: {e}"),
-            )),
+                "Invalid YAML string".to_string(),
+                errors,
+            ));
+        }
+
+        // Semantic validation using serde_yaml
+        match serde_yaml::from_str::<T>(net_state_yaml) {
+            Ok(parsed) => Ok(parsed),
+            Err(e) => {
+                error_count += 1;
+                errors.push(format!("Deserialization error: {}", e));
+                Err(NmstateError::new_with_multiple_errors(
+                    ErrorKind::InvalidArgument,
+                    "Invalid YAML string".to_string(),
+                    errors,
+                ))
+            }
         }
     }
 

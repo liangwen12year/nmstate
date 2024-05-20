@@ -17,6 +17,7 @@ path = "lib.rs"
 
 [dependencies]
 serde_yaml = { workspace = true }
+yaml-rust = { workspace = true }
 
 [dependencies.nispor]
 workspace = true 
@@ -49,6 +50,7 @@ optional = true
 
 [dev-dependencies]
 serde_yaml = { workspace = true }
+yaml-rust = { workspace = true }
 
 [features]
 default = ["query_apply", "gen_conf", "gen_revert"]
