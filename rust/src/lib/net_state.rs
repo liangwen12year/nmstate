@@ -15,45 +15,13 @@ use crate::{
     OvnConfiguration, OvsDbGlobalConfig, RouteRules, Routes,
 };
 
-/// Validate the YAML structure and collect errors
-fn validate_yaml_structure(
-    yaml: &Yaml,
-    errors: &mut Vec<String>,
-    path: String,
-) {
-    match yaml {
-        Yaml::Hash(hash) => {
-            for (key, value) in hash {
-                let key_str = key.as_str().unwrap_or("<unknown key>");
-                let new_path = format!("{}/{}", path, key_str);
-                validate_yaml_structure(value, errors, new_path);
-            }
-        }
-        Yaml::Array(array) => {
-            for (index, value) in array.iter().enumerate() {
-                let new_path = format!("{}/[{}]", path, index);
-                validate_yaml_structure(value, errors, new_path);
-            }
-        }
-        Yaml::String(s) => {
-            // Example validation: Check if string is in a specific format
-            if path.ends_with("mtu") && !s.parse::<i32>().is_ok() {
-                errors.push(format!("Invalid mtu value at {}: {}", path, s));
-            } else if path.ends_with("enabled") && !s.parse::<i32>().is_ok() {
-                errors
-                    .push(format!("Invalid enabled value at {}: {}", path, s));
-            }
-        }
-        Yaml::Integer(i) => {
-            // Example validation: Check if integer is in the expected range
-            if path.ends_with("state") && (*i != 1 && *i != 2) {
-                errors.push(format!("Invalid state value at {}: {}", path, i));
-            } else if path.ends_with("dhcp") && (*i != 0 && *i != 1) {
-                errors.push(format!("Invalid dhcp value at {}: {}", path, i));
-            }
-        }
-        _ => {}
+fn to_string(yaml: &Yaml) -> String {
+    let mut out_str = String::new();
+    {
+        let mut emitter = YamlEmitter::new(&mut out_str);
+        emitter.dump(yaml).unwrap();
     }
+    out_str
 }
 
 /// The [NetworkState] represents the whole network state including both
@@ -276,34 +244,74 @@ impl NetworkState {
     where
         T: DeserializeOwned,
     {
-        let mut error_count = 0;
         let mut errors = Vec::new();
+        let mut error_count = 0;
+        let mut current_yaml = net_state_yaml.to_string();
 
-        // First pass: Basic parsing to find syntax errors
-        let docs = match YamlLoader::load_from_str(net_state_yaml) {
-            Ok(docs) => {
-                if docs.is_empty() {
-                    error_count += 1;
-                    errors.push("Empty document".to_string());
+        loop {
+            let mut docs = match YamlLoader::load_from_str(&current_yaml) {
+                Ok(docs) => {
+                    if docs.is_empty() {
+                        error_count += 1;
+                        errors.push("Empty document".to_string());
+                    }
+                    docs
                 }
-                docs
-            }
-            Err(e) => {
-                error_count += 1;
-                errors.push(format!("Parsing error: {}", e));
-                Vec::new() // Return an empty vector on parsing error
-            }
-        };
+                Err(e) => {
+                    error_count += 1;
+                    errors.push(format!("Parsing error: {}", e));
+                    break;
+                }
+            };
 
-        // Validate each document
-        for (index, doc) in docs.iter().enumerate() {
-            let path = format!("[{}]", index);
-            validate_yaml_structure(doc, &mut errors, path);
+            let mut found_error = false;
+
+            // Try to deserialize the YAML document
+            match serde_yaml::from_str::<T>(&current_yaml) {
+                Ok(_) => break, // If deserialization succeeds, break the loop
+                Err(e) => {
+                    // If deserialization fails, find and remove the erroneous setting
+                    let error_message = format!("Deserialization error: {}", e);
+                    errors.push(error_message.clone());
+                    error_count += 1;
+                    found_error = true;
+
+                    // Remove the erroneous setting
+                    for doc in docs.iter_mut() {
+                        if let Yaml::Hash(ref mut hash) = doc {
+                            let keys: Vec<_> = hash.keys().cloned().collect();
+                            for key in keys {
+                                let value = hash.get_mut(&key).unwrap();
+                                if let Yaml::Hash(inner_hash) = value {
+                                    if inner_hash.iter().any(
+                                        |(_, v)| match *v {
+                                            Yaml::BadValue => true,
+                                            _ => false,
+                                        },
+                                    ) {
+                                        hash.remove(&key);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !found_error {
+                break;
+            }
+
+            // Re-emit the YAML without the invalid values
+            current_yaml = docs
+                .iter()
+                .map(|d| to_string(d))
+                .collect::<Vec<_>>()
+                .join("\n");
         }
 
-        // If there were validation errors, return them
-        if !errors.is_empty() {
-            error_count += errors.len();
+        if error_count > 0 {
             return Err(NmstateError::new_with_multiple_errors(
                 ErrorKind::InvalidArgument,
                 "Invalid YAML string".to_string(),
@@ -311,12 +319,11 @@ impl NetworkState {
             ));
         }
 
-        // Semantic validation using serde_yaml
-        match serde_yaml::from_str::<T>(net_state_yaml) {
+        match serde_yaml::from_str::<T>(&current_yaml) {
             Ok(parsed) => Ok(parsed),
             Err(e) => {
-                error_count += 1;
                 errors.push(format!("Deserialization error: {}", e));
+                error_count += 1;
                 Err(NmstateError::new_with_multiple_errors(
                     ErrorKind::InvalidArgument,
                     "Invalid YAML string".to_string(),
