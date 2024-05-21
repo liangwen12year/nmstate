@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_yaml;
+use std::collections::HashMap;
 use yaml_rust::{Yaml, YamlEmitter, YamlLoader};
 
 use crate::{
@@ -265,6 +266,8 @@ impl NetworkState {
         let mut errors = Vec::new();
         let mut error_count = 0;
         let mut current_yaml = net_state_yaml.to_string();
+        let mut encountered_errors = HashMap::new();
+        let mut previous_error_message = String::new();
 
         loop {
             let mut docs = match YamlLoader::load_from_str(&current_yaml) {
@@ -290,6 +293,20 @@ impl NetworkState {
                 Err(e) => {
                     // If deserialization fails, find and remove the erroneous setting
                     let error_message = format!("Deserialization error: {}", e);
+
+                    // Check if the same error message has occurred multiple times
+                    let count = encountered_errors
+                        .entry(error_message.clone())
+                        .or_insert(0);
+                    *count += 1;
+
+                    if *count > 1 {
+                        errors
+                            .push(format!("Repeated error: {}", error_message));
+                        break;
+                    }
+
+                    previous_error_message = error_message.clone();
                     errors.push(error_message.clone());
                     error_count += 1;
                     found_error = true;
@@ -336,7 +353,6 @@ impl NetworkState {
             }
         }
     }
-
     /// Append [Interface] into [NetworkState]
     pub fn append_interface_data(&mut self, iface: Interface) {
         self.interfaces.push(iface);
