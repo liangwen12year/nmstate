@@ -15,6 +15,24 @@ use crate::{
     OvnConfiguration, OvsDbGlobalConfig, RouteRules, Routes,
 };
 
+/// Recursively remove erroneous settings from the hash
+fn remove_erroneous_setting(hash: &mut yaml_rust::yaml::Hash) {
+    let keys: Vec<_> = hash.keys().cloned().collect();
+    for key in keys {
+        let value = hash.get_mut(&key).unwrap();
+        match value {
+            Yaml::Hash(inner_hash) => {
+                remove_erroneous_setting(inner_hash);
+            }
+            Yaml::BadValue => {
+                hash.remove(&key);
+                break;
+            }
+            _ => {}
+        }
+    }
+}
+
 fn to_string(yaml: &Yaml) -> String {
     let mut out_str = String::new();
     {
@@ -276,24 +294,10 @@ impl NetworkState {
                     error_count += 1;
                     found_error = true;
 
-                    // Remove the erroneous setting
+                    // Remove the erroneous setting by setting it to Yaml::BadValue
                     for doc in docs.iter_mut() {
                         if let Yaml::Hash(ref mut hash) = doc {
-                            let keys: Vec<_> = hash.keys().cloned().collect();
-                            for key in keys {
-                                let value = hash.get_mut(&key).unwrap();
-                                if let Yaml::Hash(inner_hash) = value {
-                                    if inner_hash.iter().any(
-                                        |(_, v)| match *v {
-                                            Yaml::BadValue => true,
-                                            _ => false,
-                                        },
-                                    ) {
-                                        hash.remove(&key);
-                                        break;
-                                    }
-                                }
-                            }
+                            remove_erroneous_setting(hash);
                         }
                     }
                 }
