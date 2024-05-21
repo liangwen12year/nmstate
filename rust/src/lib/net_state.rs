@@ -225,10 +225,25 @@ impl NetworkState {
     pub fn new_from_yaml(net_state_yaml: &str) -> Result<Self, NmstateError> {
         match serde_yaml::from_str(net_state_yaml) {
             Ok(s) => Ok(s),
-            Err(e) => Err(NmstateError::new(
-                ErrorKind::InvalidArgument,
-                format!("Invalid YAML string: {e}"),
-            )),
+            Err(e) => {
+                let location = e.location();
+                let error_message = if let Some(location) = location {
+                    let lines: Vec<&str> = net_state_yaml.lines().collect();
+                    let line_content = lines.get(location.line() - 1).unwrap_or(&"");
+                    format!(
+                        "Invalid YAML string at line {}: {} - {}",
+                        location.line(),
+                        line_content,
+                        e
+                    )
+                } else {
+                    format!("Invalid YAML string: {}", e)
+                };
+                Err(NmstateError::new(
+                    ErrorKind::InvalidArgument,
+                    error_message,
+                ))
+            }
         }
     }
 
