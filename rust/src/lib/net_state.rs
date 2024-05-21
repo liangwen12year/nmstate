@@ -223,8 +223,16 @@ impl NetworkState {
     /// Wrapping function of [serde_yaml::from_str()] with error mapped to
     /// [NmstateError].
     pub fn new_from_yaml(net_state_yaml: &str) -> Result<Self, NmstateError> {
-        match serde_yaml::from_str(net_state_yaml) {
-            Ok(s) => Ok(s),
+        match serde_yaml::from_str::<serde_yaml::Value>(net_state_yaml) {
+            Ok(_) => {
+                match serde_yaml::from_str(net_state_yaml) {
+                    Ok(s) => Ok(s),
+                    Err(e) => {
+                        let error_message = format!("Invalid YAML string: {}", e);
+                        Err(NmstateError::new(ErrorKind::InvalidArgument, error_message))
+                    }
+                }
+            }
             Err(e) => {
                 let location = e.location();
                 let error_message = if let Some(location) = location {
