@@ -14,28 +14,42 @@ use crate::{
     MergedOvsDbGlobalConfig, MergedRouteRules, MergedRoutes, NmstateError,
     OvnConfiguration, OvsDbGlobalConfig, RouteRules, Routes,
 };
+
 /// Validate the YAML structure and collect errors
-fn validate_yaml_structure(yaml: &Yaml, errors: &mut Vec<String>, path: String) {
+fn validate_yaml_structure(
+    yaml: &Yaml,
+    errors: &mut Vec<String>,
+    path: String,
+) {
     match yaml {
         Yaml::Hash(hash) => {
             for (key, value) in hash {
                 let key_str = key.as_str().unwrap_or("<unknown key>");
                 let new_path = format!("{}/{}", path, key_str);
-                if let Yaml::BadValue = value {
-                    errors.push(format!("Invalid value at {}", new_path));
-                } else {
-                    validate_yaml_structure(value, errors, new_path);
-                }
+                validate_yaml_structure(value, errors, new_path);
             }
         }
         Yaml::Array(array) => {
             for (index, value) in array.iter().enumerate() {
                 let new_path = format!("{}/[{}]", path, index);
-                if let Yaml::BadValue = value {
-                    errors.push(format!("Invalid value at {}", new_path));
-                } else {
-                    validate_yaml_structure(value, errors, new_path);
-                }
+                validate_yaml_structure(value, errors, new_path);
+            }
+        }
+        Yaml::String(s) => {
+            // Example validation: Check if string is in a specific format
+            if path.ends_with("mtu") && !s.parse::<i32>().is_ok() {
+                errors.push(format!("Invalid mtu value at {}: {}", path, s));
+            } else if path.ends_with("enabled") && !s.parse::<i32>().is_ok() {
+                errors
+                    .push(format!("Invalid enabled value at {}: {}", path, s));
+            }
+        }
+        Yaml::Integer(i) => {
+            // Example validation: Check if integer is in the expected range
+            if path.ends_with("state") && (*i != 1 && *i != 2) {
+                errors.push(format!("Invalid state value at {}: {}", path, i));
+            } else if path.ends_with("dhcp") && (*i != 0 && *i != 1) {
+                errors.push(format!("Invalid dhcp value at {}: {}", path, i));
             }
         }
         _ => {}
@@ -287,20 +301,19 @@ impl NetworkState {
             validate_yaml_structure(doc, &mut errors, path);
         }
 
+        // If there were validation errors, return them
+        if !errors.is_empty() {
+            error_count += errors.len();
+            return Err(NmstateError::new_with_multiple_errors(
+                ErrorKind::InvalidArgument,
+                "Invalid YAML string".to_string(),
+                errors,
+            ));
+        }
+
         // Semantic validation using serde_yaml
         match serde_yaml::from_str::<T>(net_state_yaml) {
-            Ok(parsed) => {
-                if errors.is_empty() {
-                    Ok(parsed)
-                } else {
-                    error_count += errors.len();
-                    Err(NmstateError::new_with_multiple_errors(
-                        ErrorKind::InvalidArgument,
-                        "Invalid YAML string".to_string(),
-                        errors,
-                    ))
-                }
-            }
+            Ok(parsed) => Ok(parsed),
             Err(e) => {
                 error_count += 1;
                 errors.push(format!("Deserialization error: {}", e));
