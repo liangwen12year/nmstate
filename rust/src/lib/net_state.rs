@@ -24,6 +24,28 @@ fn identify_error_path(error: &serde_yaml::Error) -> Option<Vec<String>> {
     Some(vec!["interfaces".to_string(), "state".to_string()])
 }
 
+/// Find the erroneous setting in the YAML documents
+fn find_erroneous_setting(
+    error: &serde_yaml::Error,
+    yaml_content: &str,
+) -> String {
+    if let Some(location) = error.location() {
+        let line = location.line();
+        let content = read_lines(yaml_content, line);
+        return format!("Line {}: {}", line + 1, content);
+    }
+    "Unknown setting".to_string()
+}
+
+/// Read specific lines from a string
+fn read_lines(yaml_content: &str, target_line: usize) -> String {
+    yaml_content
+        .lines()
+        .nth(target_line)
+        .unwrap_or("")
+        .to_string()
+}
+
 /// Recursively remove the erroneous setting from the Value
 fn remove_erroneous_setting(value: &mut Value, path: &[String]) {
     if path.is_empty() {
@@ -35,7 +57,9 @@ fn remove_erroneous_setting(value: &mut Value, path: &[String]) {
 
     if let Some(map) = value.as_mapping_mut() {
         if rest_path.is_empty() {
-            map.remove(&Value::String(key.clone()));
+            if let Some(v) = map.remove(&Value::String(key.clone())) {
+                println!("Removed setting: {} -> {:?}", key, v); // Debug print
+            }
         } else if let Some(next_value) =
             map.get_mut(&Value::String(key.clone()))
         {
@@ -45,7 +69,8 @@ fn remove_erroneous_setting(value: &mut Value, path: &[String]) {
         if let Ok(index) = key.parse::<usize>() {
             if index < seq.len() {
                 if rest_path.is_empty() {
-                    seq.remove(index);
+                    let v = seq.remove(index);
+                    println!("Removed setting at index {}: {:?}", index, v); // Debug print
                 } else {
                     remove_erroneous_setting(&mut seq[index], rest_path);
                 }
@@ -286,7 +311,6 @@ impl NetworkState {
         let mut errors = Vec::new();
         let mut error_count = 0;
         let mut current_yaml = net_state_yaml.to_string();
-        let mut encountered_errors: HashMap<String, usize> = HashMap::new();
         let mut previous_error_message = String::new();
         let mut successive_error_count = 0;
 
@@ -331,7 +355,12 @@ impl NetworkState {
                         break;
                     }
 
-                    errors.push(error_message.clone());
+                    let erroneous_setting =
+                        find_erroneous_setting(&e, net_state_yaml);
+                    errors.push(format!(
+                        "{} Setting: {}",
+                        error_message, erroneous_setting
+                    ));
                     error_count += 1;
                     found_error = true;
 
@@ -341,6 +370,10 @@ impl NetworkState {
 
                     // Remove the erroneous setting
                     if let Some(erroneous_path) = identify_error_path(&e) {
+                        println!(
+                            "Removing setting at path: {:?}",
+                            erroneous_path
+                        ); // Debug print
                         remove_erroneous_setting(&mut value, &erroneous_path);
                     }
 
