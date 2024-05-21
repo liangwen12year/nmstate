@@ -3,14 +3,15 @@
 #[cfg(not(feature = "gen_conf"))]
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
 use crate::{
     DnsState, ErrorKind, HostNameState, Interface, Interfaces, MergedDnsState,
     MergedHostNameState, MergedInterfaces, MergedOvnConfiguration,
     MergedOvsDbGlobalConfig, MergedRouteRules, MergedRoutes, NmstateError,
     OvnConfiguration, OvsDbGlobalConfig, RouteRules, Routes,
 };
+use serde::{Deserialize, Serialize};
+use yaml_rust::{ScanError, YamlLoader};
+use regex::Regex;
 
 /// The [NetworkState] represents the whole network state including both
 /// kernel status and configurations provides by backends(NetworkManager,
@@ -223,30 +224,40 @@ impl NetworkState {
     /// Wrapping function of [serde_yaml::from_str()] with error mapped to
     /// [NmstateError].
     pub fn new_from_yaml(net_state_yaml: &str) -> Result<Self, NmstateError> {
-        match serde_yaml::from_str::<serde_yaml::Value>(net_state_yaml) {
+        // First, parse the YAML with yaml_rust to check for errors and capture accurate line numbers
+        match YamlLoader::load_from_str(net_state_yaml) {
             Ok(_) => {
+                // If yaml_rust parsing is successful, attempt deserialization with serde_yaml
                 match serde_yaml::from_str(net_state_yaml) {
                     Ok(s) => Ok(s),
                     Err(e) => {
-                        let error_message = format!("Invalid YAML string: {}", e);
-                        Err(NmstateError::new(ErrorKind::InvalidArgument, error_message))
+                        let error_message =
+                            format!("Invalid YAML string: {}", e);
+                        Err(NmstateError::new(
+                            ErrorKind::InvalidArgument,
+                            error_message,
+                        ))
                     }
                 }
             }
             Err(e) => {
-                let location = e.location();
-                let error_message = if let Some(location) = location {
-                    let lines: Vec<&str> = net_state_yaml.lines().collect();
-                    let line_content = lines.get(location.line() - 1).unwrap_or(&"");
-                    format!(
-                        "Invalid YAML string at line {}: {} - {}",
-                        location.line(),
-                        line_content,
-                        e
-                    )
-                } else {
-                    format!("Invalid YAML string: {}", e)
-                };
+                // Extract the line number from the error message
+                let re = Regex::new(r"line (\d+)").unwrap();
+                let line_number = re
+                    .captures(&e.to_string())
+                    .and_then(|caps| caps.get(1))
+                    .and_then(|cap| cap.as_str().parse::<usize>().ok())
+                    .unwrap_or(0);
+
+                // Adjust to 0-based index
+                let lines: Vec<&str> = net_state_yaml.lines().collect();
+                let line_content = lines.get(line_number).unwrap_or(&"");
+                let error_message = format!(
+                    "Invalid YAML string at line {}: {} - {}",
+                    line_number + 1, // Convert to 1-based line number
+                    line_content,
+                    e
+                );
                 Err(NmstateError::new(
                     ErrorKind::InvalidArgument,
                     error_message,
