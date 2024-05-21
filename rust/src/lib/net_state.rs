@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_yaml;
+use serde_yaml::Value;
 use std::collections::HashMap;
 use yaml_rust::{Yaml, YamlEmitter, YamlLoader};
 
@@ -16,20 +17,39 @@ use crate::{
     OvnConfiguration, OvsDbGlobalConfig, RouteRules, Routes,
 };
 
-/// Recursively remove erroneous settings from the hash
-fn remove_erroneous_setting(hash: &mut yaml_rust::yaml::Hash) {
-    let keys: Vec<_> = hash.keys().cloned().collect();
-    for key in keys {
-        let value = hash.get_mut(&key).unwrap();
-        match value {
-            Yaml::Hash(inner_hash) => {
-                remove_erroneous_setting(inner_hash);
+/// Identify the path to the erroneous setting in the YAML document
+fn identify_error_path(error: &serde_yaml::Error) -> Option<Vec<String>> {
+    // Implement logic to parse the error and identify the path to the erroneous setting
+    // This is a placeholder implementation
+    Some(vec!["interfaces".to_string(), "state".to_string()])
+}
+
+/// Recursively remove the erroneous setting from the Value
+fn remove_erroneous_setting(value: &mut Value, path: &[String]) {
+    if path.is_empty() {
+        return;
+    }
+
+    let key = &path[0];
+    let rest_path = &path[1..];
+
+    if let Some(map) = value.as_mapping_mut() {
+        if rest_path.is_empty() {
+            map.remove(&Value::String(key.clone()));
+        } else if let Some(next_value) =
+            map.get_mut(&Value::String(key.clone()))
+        {
+            remove_erroneous_setting(next_value, rest_path);
+        }
+    } else if let Some(seq) = value.as_sequence_mut() {
+        if let Ok(index) = key.parse::<usize>() {
+            if index < seq.len() {
+                if rest_path.is_empty() {
+                    seq.remove(index);
+                } else {
+                    remove_erroneous_setting(&mut seq[index], rest_path);
+                }
             }
-            Yaml::BadValue => {
-                hash.remove(&key);
-                break;
-            }
-            _ => {}
         }
     }
 }
@@ -267,10 +287,9 @@ impl NetworkState {
         let mut error_count = 0;
         let mut current_yaml = net_state_yaml.to_string();
         let mut encountered_errors = HashMap::new();
-        let mut previous_error_message = String::new();
 
         loop {
-            let mut docs = match YamlLoader::load_from_str(&current_yaml) {
+            let docs = match YamlLoader::load_from_str(&current_yaml) {
                 Ok(docs) => {
                     if docs.is_empty() {
                         error_count += 1;
@@ -306,30 +325,28 @@ impl NetworkState {
                         break;
                     }
 
-                    previous_error_message = error_message.clone();
                     errors.push(error_message.clone());
                     error_count += 1;
                     found_error = true;
 
-                    // Remove the erroneous setting by setting it to Yaml::BadValue
-                    for doc in docs.iter_mut() {
-                        if let Yaml::Hash(ref mut hash) = doc {
-                            remove_erroneous_setting(hash);
-                        }
+                    // Convert the YAML to a serde_yaml::Value for easier manipulation
+                    let mut value: Value = serde_yaml::from_str(&current_yaml)
+                        .unwrap_or(Value::Null);
+
+                    // Remove the erroneous setting
+                    if let Some(erroneous_path) = identify_error_path(&e) {
+                        remove_erroneous_setting(&mut value, &erroneous_path);
                     }
+
+                    // Convert the updated Value back to YAML string
+                    current_yaml =
+                        serde_yaml::to_string(&value).unwrap_or_default();
                 }
             }
 
             if !found_error {
                 break;
             }
-
-            // Re-emit the YAML without the invalid values
-            current_yaml = docs
-                .iter()
-                .map(|d| to_string(d))
-                .collect::<Vec<_>>()
-                .join("\n");
         }
 
         if error_count > 0 {
