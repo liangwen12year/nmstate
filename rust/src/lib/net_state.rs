@@ -286,7 +286,9 @@ impl NetworkState {
         let mut errors = Vec::new();
         let mut error_count = 0;
         let mut current_yaml = net_state_yaml.to_string();
-        let mut encountered_errors = HashMap::new();
+        let mut encountered_errors: HashMap<String, usize> = HashMap::new();
+        let mut previous_error_message = String::new();
+        let mut successive_error_count = 0;
 
         loop {
             let docs = match YamlLoader::load_from_str(&current_yaml) {
@@ -313,15 +315,19 @@ impl NetworkState {
                     // If deserialization fails, find and remove the erroneous setting
                     let error_message = format!("Deserialization error: {}", e);
 
-                    // Check if the same error message has occurred multiple times
-                    let count = encountered_errors
-                        .entry(error_message.clone())
-                        .or_insert(0);
-                    *count += 1;
+                    // Check if the same error message has occurred successively more than 5 times
+                    if previous_error_message == error_message {
+                        successive_error_count += 1;
+                    } else {
+                        successive_error_count = 1;
+                        previous_error_message = error_message.clone();
+                    }
 
-                    if *count > 1 {
-                        errors
-                            .push(format!("Repeated error: {}", error_message));
+                    if successive_error_count > 5 {
+                        errors.push(format!(
+                            "Repeated error more than 5 times: {}",
+                            error_message
+                        ));
                         break;
                     }
 
@@ -370,6 +376,7 @@ impl NetworkState {
             }
         }
     }
+
     /// Append [Interface] into [NetworkState]
     pub fn append_interface_data(&mut self, iface: Interface) {
         self.interfaces.push(iface);
