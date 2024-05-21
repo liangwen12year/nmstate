@@ -65,8 +65,8 @@ impl std::fmt::Display for NmstateError {
         } else {
             write!(
                 f,
-                "{}: {}\nError count: {}",
-                self.kind, self.msg, self.error_count
+                "{}: {}\nError count: {}\nErrors: {:?}",
+                self.kind, self.msg, self.error_count, self.errors
             )
         }
     }
@@ -82,6 +82,7 @@ pub struct NmstateError {
     line: String,
     position: usize,
     error_count: usize,
+    errors: Vec<String>, // Store multiple error messages
 }
 
 impl NmstateError {
@@ -100,7 +101,23 @@ impl NmstateError {
             kind,
             msg,
             error_count,
+            errors: Vec::new(),
             ..Default::default()
+        }
+    }
+
+    pub fn new_with_multiple_errors(
+        kind: ErrorKind,
+        msg: String,
+        errors: Vec<String>,
+    ) -> Self {
+        Self {
+            kind,
+            msg,
+            line: String::new(),
+            position: 0,
+            error_count: errors.len(),
+            errors,
         }
     }
 
@@ -110,7 +127,8 @@ impl NmstateError {
             line: line.to_string(),
             msg,
             position,
-            error_count: 0, // or provide a way to set this if needed
+            error_count: 1, // or provide a way to set this if needed
+            errors: Vec::new(),
         }
     }
 
