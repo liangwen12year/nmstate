@@ -23,6 +23,7 @@ from libnmstate.schema import LinuxBridge
 from libnmstate.schema import VLAN
 
 from .testlib import assertlib
+from .testlib.apply import apply_with_description
 from .testlib.assertlib import assert_mac_address
 from .testlib.bondlib import bond_interface
 from .testlib.bridgelib import add_port_to_bridge
@@ -206,7 +207,10 @@ def test_remove_bridge_and_keep_port_up(bridge0_with_port0, port0_up):
         ]
     }
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Bring up the device {} with IPv4 and IPv6 disabled".format(port_name),
+        desired_state,
+    )
 
     current_state = show_only((bridge_name, port_name))
 
@@ -241,7 +245,7 @@ def test_add_port_to_existing_bridge(bridge0_with_port0, port1_up):
     port1_name = port1_up[Interface.KEY][0][Interface.NAME]
     _add_port_to_bridge(bridge_state, port1_name)
 
-    libnmstate.apply(desired_state)
+    apply_with_description("Add the port0 to the bridge0", desired_state)
 
     assertlib.assert_state(desired_state)
 
@@ -322,7 +326,9 @@ def test_linux_bridge_add_port_with_name_only(bridge0_with_port0, port1_up):
         {LinuxBridge.Port.NAME: port1_name}
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Create bridge linux-br0 and add the port to it", desired_state
+    )
 
     assertlib.assert_state_match(desired_state)
 
@@ -1146,7 +1152,8 @@ def test_policy_create_bridge_by_description_of_port(
         assert br_ports[1][LinuxBridge.Port.NAME] == "eth2"
         assert get_mac_address(TEST_BRIDGE0) == eth2_mac
     finally:
-        libnmstate.apply(
+        apply_with_description(
+            "Delete bridge linux-br0",
             load_yaml(
                 """---
                 interfaces:
@@ -1160,7 +1167,8 @@ def test_policy_create_bridge_by_description_of_port(
 
 
 def test_add_port_to_br_with_controller_property(bridge0_with_port0, eth2_up):
-    libnmstate.apply(
+    apply_with_description(
+        "Configure eth2 with the controller linux-br0",
         {
             Interface.KEY: [
                 {
@@ -1169,7 +1177,7 @@ def test_add_port_to_br_with_controller_property(bridge0_with_port0, eth2_up):
                     Interface.CONTROLLER: TEST_BRIDGE0,
                 }
             ]
-        }
+        },
     )
     current_state = show_only([TEST_BRIDGE0])
     br_iface = current_state[Interface.KEY][0]
@@ -1262,7 +1270,8 @@ def test_controller_detach_but_in_port_list():
 
 
 def test_controller_detach_from_linux_bridge(bridge0_with_port0):
-    libnmstate.apply(
+    apply_with_description(
+        "Bring up eth1",
         {
             Interface.KEY: [
                 {
@@ -1271,7 +1280,7 @@ def test_controller_detach_from_linux_bridge(bridge0_with_port0):
                     Interface.CONTROLLER: "",
                 },
             ]
-        }
+        },
     )
     state = show_only([TEST_BRIDGE0])
     assert (
@@ -1295,5 +1304,7 @@ def test_attach_bond_to_empty_bridge(empty_bridge, bond0):
     bond0[Interface.KEY][0][Interface.CONTROLLER] = TEST_BRIDGE0
     desired_state = bond0
     desired_state[Interface.KEY].append(empty_bridge[Interface.KEY][0])
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Add empty bridge linux-br0 and attach bond0 to it", desired_state
+    )
     assertlib.assert_state_match(desired_state)
