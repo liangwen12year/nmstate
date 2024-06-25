@@ -31,6 +31,7 @@ from .testlib import cmdlib
 from .testlib import bondlib
 from .testlib import ifacelib
 from .testlib import statelib
+from .testlib.apply import apply_with_description
 from .testlib.env import is_k8s
 from .testlib.ifacelib import get_mac_address
 from .testlib.bridgelib import add_port_to_bridge
@@ -166,14 +167,20 @@ def iface_with_dynamic_ip_up(ifname):
         ]
     }
     try:
-        libnmstate.apply(desired_state)
+        apply_with_description(
+            "Configure the interface {} with DHCP4 and DHCP6 enabled".format(
+                ifname
+            ),
+            desired_state,
+        )
         assert _poll(_has_ipv4_dhcp_gateway)
         assert _poll(_has_dhcpv4_addr)
         assert _poll(_has_ipv6_auto_gateway)
         assert _poll(_has_dhcpv6_addr)
         yield statelib.show_only((ifname,))
     finally:
-        libnmstate.apply(
+        apply_with_description(
+            "Remove the interface {}".format(ifname),
             {
                 Interface.KEY: [
                     {
@@ -181,7 +188,7 @@ def iface_with_dynamic_ip_up(ifname):
                         Interface.STATE: InterfaceState.ABSENT,
                     }
                 ]
-            }
+            },
         )
 
 
@@ -194,7 +201,9 @@ def test_ipv4_dhcp(dhcpcli_up):
         enabled=True, dhcp=True
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure DHCP4 on the device dhcpcli", desired_state
+    )
     assertlib.assert_state(desired_state)
 
     assert _poll(_has_ipv4_dhcp_nameserver)
@@ -210,7 +219,9 @@ def test_ipv6_dhcp_only(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure DHCP6 on the device dhcpcli", desired_state
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv6_auto_nameserver)
@@ -229,7 +240,9 @@ def test_ipv6_dhcp_and_autoconf(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=True
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure DHCP6 on the device dhcpcli", desired_state
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv6_auto_gateway)
@@ -269,7 +282,9 @@ def test_static_ip_with_auto_ip_enabled(dhcpcli_up):
         ]
     }
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure DHCP on the interface dhcpcli", desired_state
+    )
 
     assert _poll(_has_ipv4_dhcp_nameserver)
     assert _poll(_has_ipv4_dhcp_gateway)
@@ -318,7 +333,10 @@ def test_ipv4_dhcp_ignore_gateway(dhcpcli_up):
         enabled=True, dhcp=True, auto_gateway=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure DHCP4 on the interface dhcpcli with auto gateway false",
+        desired_state,
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv4_dhcp_nameserver)
@@ -334,7 +352,9 @@ def test_ipv4_dhcp_ignore_dns(dhcpcli_up):
         enabled=True, dhcp=True, auto_dns=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Setup DHCP4 on the interface dhcpcli", desired_state
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv4_dhcp_gateway)
@@ -350,7 +370,10 @@ def test_ipv4_dhcp_ignore_routes(dhcpcli_up):
         enabled=True, dhcp=True, auto_routes=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Setup DHCP4 on the interface dhcpcli with auto routes false",
+        desired_state,
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv4_dhcp_nameserver)
@@ -366,7 +389,9 @@ def test_ipv4_dhcp_set_table_id(dhcpcli_up):
         enabled=True, dhcp=True, table_id=100
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP4 on the interface dhcpcli", desired_state
+    )
     assertlib.assert_state(desired_state)
 
 
@@ -378,7 +403,9 @@ def test_ipv6_dhcp_set_table_id_without_autoconf(dhcpcli_up):
         enabled=True, dhcp=True, table_id=100
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli", desired_state
+    )
     assertlib.assert_state(desired_state)
 
 
@@ -390,7 +417,9 @@ def test_ipv6_dhcp_set_table_id_with_autoconf(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=True, table_id=100
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli", desired_state
+    )
     assertlib.assert_state(desired_state)
 
 
@@ -402,7 +431,10 @@ def test_ipv6_dhcp_and_autoconf_ignore_gateway(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=True, auto_gateway=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli with auto gateway false",
+        desired_state,
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv6_auto_extra_route)
@@ -418,7 +450,10 @@ def test_ipv6_dhcp_and_autoconf_ignore_dns(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=True, auto_dns=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli with auto dns disabled",
+        desired_state,
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv6_auto_gateway)
@@ -434,7 +469,9 @@ def test_ipv6_dhcp_and_autoconf_ignore_routes(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=True, auto_routes=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli", desired_state
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv6_auto_nameserver)
@@ -463,7 +500,9 @@ def test_ipv4_dhcp_off_and_option_on(dhcpcli_up):
 
     dhcp_cli_desired_state[Interface.IPV4] = ipv4_state
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP4 on the interface dhcpcli", desired_state
+    )
 
     current_state = statelib.show_only((DHCP_CLI_NIC,))
     dhcp_cli_current_state = current_state[Interface.KEY][0]
@@ -498,7 +537,9 @@ def test_ipv6_dhcp_off_and_option_on(dhcpcli_up):
     ]
     dhcp_cli_desired_state[Interface.IPV6] = ipv6_state
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli", desired_state
+    )
 
     current_state = statelib.show_only((DHCP_CLI_NIC,))
     dhcp_cli_current_state = current_state[Interface.KEY][0]
@@ -520,7 +561,9 @@ def test_ipv4_dhcp_switch_on_to_off(dhcpcli_up):
         enabled=True, dhcp=True
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up DHCP4 on the interface dhcpcli", desired_state
+    )
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv4_dhcp_nameserver)
     assert _poll(_has_ipv4_dhcp_gateway)
@@ -534,7 +577,9 @@ def test_ipv4_dhcp_switch_on_to_off(dhcpcli_up):
         enabled=True, dhcp=False
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up static IPv4 on the interface dhcpcli", desired_state
+    )
     assertlib.assert_state(desired_state)
     # When converting from DHCP to static without address mentioned,
     # nmstate should convert existing dynamic IP addresses to static
@@ -552,7 +597,9 @@ def test_ipv6_dhcp_switch_on_to_off(dhcpcli_up):
         enabled=True, dhcp=True, autoconf=True
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up static DHCP6 on the interface dhcpcli", desired_state
+    )
 
     assertlib.assert_state(desired_state)
     assert _poll(_has_ipv6_auto_gateway)
@@ -566,7 +613,10 @@ def test_ipv6_dhcp_switch_on_to_off(dhcpcli_up):
     dhcp_cli_desired_state[Interface.IPV6] = _create_ipv6_state(enabled=True)
 
     print(desired_state)
-    libnmstate.apply(desired_state)
+
+    apply_with_description(
+        "Set up DHCP6 on the interface dhcpcli", desired_state
+    )
 
     assertlib.assert_state(desired_state)
     assert not _poll_till_not(_has_ipv6_auto_gateway)
@@ -639,7 +689,7 @@ def test_port_ipaddr_learned_via_dhcp_added_as_static_to_linux_bridge(
         enabled=True, dhcp=True
     )
 
-    libnmstate.apply(dhcpcli_up)
+    apply_with_description("Set up DHCP4 on the interface dhcpcli", dhcpcli_up)
 
     assert _poll(_has_dhcpv4_addr)
 
@@ -668,7 +718,9 @@ def test_port_ipaddr_learned_via_dhcp_added_as_static_to_linux_bridge(
                 Interface.IPV6: _create_ipv6_state(enabled=False),
             }
         )
-        libnmstate.apply(state)
+        apply_with_description(
+            "Set up ipv4 and ipv6 on the interface dhcpcli", state
+        )
 
         assertlib.assert_state_match(state)
 
@@ -681,7 +733,9 @@ def test_ipv6_autoconf_only(dhcpcli_up):
         enabled=True, autoconf=True
     )
 
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set up ipv4 on the interface dhcpcli", desired_state
+    )
 
 
 def _setup_dhcp_nics():
