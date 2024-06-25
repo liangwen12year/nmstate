@@ -17,6 +17,7 @@ from libnmstate.schema import Route
 
 from .testlib import assertlib
 from .testlib import cmdlib
+from .testlib.apply import apply_with_description
 from .testlib.bondlib import bond_interface
 from .testlib.genconf import gen_conf_apply
 from .testlib.servicelib import disable_service
@@ -53,7 +54,7 @@ def dns_test_env(eth1_up, eth2_up):
         Interface.KEY: _get_test_iface_states(),
         DNS.KEY: {DNS.CONFIG: {DNS.SERVER: [], DNS.SEARCH: []}},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description("Clean the DNS config", desired_state)
 
 
 @pytest.mark.tier1
@@ -64,7 +65,9 @@ def test_dns_edit_nameserver_with_static_gateway(dns_config):
         Route.KEY: {Route.CONFIG: _gen_default_gateway_route()},
         DNS.KEY: {DNS.CONFIG: dns_config},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Apply the interface, route, and DNS config", desired_state
+    )
     current_state = libnmstate.show()
     assert dns_config == current_state[DNS.KEY][DNS.CONFIG]
 
@@ -79,7 +82,10 @@ def test_dns_edit_ipv4_nameserver_before_ipv6():
         Route.KEY: {Route.CONFIG: _gen_default_gateway_route()},
         DNS.KEY: {DNS.CONFIG: dns_config},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set the DNS sever 8.8.8.8 and 2001:4860:4860::8888, keep the default interface and route settings",
+        desired_state,
+    )
     current_state = libnmstate.show()
     assert dns_config == current_state[DNS.KEY][DNS.CONFIG]
 
@@ -95,7 +101,10 @@ def test_dns_edit_ipv6_nameserver_before_ipv4():
         Route.KEY: {Route.CONFIG: _gen_default_gateway_route()},
         DNS.KEY: {DNS.CONFIG: dns_config},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set the DNS sever 2001:4860:4860::8888 and 8.8.8.8, keep the default interface and route settings",
+        desired_state,
+    )
     current_state = libnmstate.show()
     assert dns_config == current_state[DNS.KEY][DNS.CONFIG]
 
@@ -142,7 +151,9 @@ def test_dns_edit_3_more_nameservers(dns_servers):
         Route.KEY: {Route.CONFIG: _gen_default_gateway_route()},
         DNS.KEY: {DNS.CONFIG: dns_config},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Apply the interface, route, and DNS servers", desired_state
+    )
     current_state = libnmstate.show()
     assert dns_config == current_state[DNS.KEY][DNS.CONFIG]
 
@@ -166,11 +177,15 @@ def test_remove_dns_config(empty_dns_config):
         Route.KEY: {Route.CONFIG: _gen_default_gateway_route()},
         DNS.KEY: {DNS.CONFIG: dns_config},
     }
-    libnmstate.apply(desired_state)
-
-    libnmstate.apply(
-        {Interface.KEY: [], DNS.KEY: {DNS.CONFIG: empty_dns_config}}
+    apply_with_description(
+        "Apply the interface, route, and DNS servers", desired_state
     )
+
+    apply_with_description(
+        "Empty DNS config",
+        {Interface.KEY: [], DNS.KEY: {DNS.CONFIG: empty_dns_config}},
+    )
+
     current_state = libnmstate.show()
     assert {} == current_state[DNS.KEY][DNS.CONFIG]
 
@@ -182,10 +197,14 @@ def dummy0_up():
         Interface.TYPE: InterfaceType.DUMMY,
         Interface.STATE: InterfaceState.UP,
     }
-    libnmstate.apply({Interface.KEY: [dummy_iface_state]})
+    apply_with_description(
+        "Configure dummy0", {Interface.KEY: [dummy_iface_state]}
+    )
     yield dummy_iface_state
     dummy_iface_state[Interface.STATE] = InterfaceState.ABSENT
-    libnmstate.apply({Interface.KEY: [dummy_iface_state]})
+    apply_with_description(
+        "Remove dummy0 interface", {Interface.KEY: [dummy_iface_state]}
+    )
 
 
 def test_preserve_dns_config(dummy0_up):
@@ -198,12 +217,16 @@ def test_preserve_dns_config(dummy0_up):
         Route.KEY: {Route.CONFIG: _gen_default_gateway_route()},
         DNS.KEY: {DNS.CONFIG: dns_config},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure the DNS sever 2001:4860:4860::8888 and 8.8.8.8, keep the default interface and route settings",
+        desired_state,
+    )
 
     # Add new dummy interface with default gateway, nmstate should
     # preserve the existing DNS configure as interface holding DNS
     # configuration is not changed and DNS configure is still the same.
-    libnmstate.apply(
+    apply_with_description(
+        "Configure the dummy0 interface with static ipv4, ipv6 and routes",
         {
             Interface.KEY: [
                 {
@@ -243,7 +266,7 @@ def test_preserve_dns_config(dummy0_up):
                     },
                 ]
             },
-        }
+        },
     )
 
     current_state = libnmstate.show()
@@ -263,14 +286,17 @@ def setup_ipv4_ipv6_name_server():
             }
         },
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure the DNS sever 2001:4860:4860::8888 and 8.8.8.8, keep the default interface and route settings",
+        desired_state,
+    )
     yield desired_state
 
 
 def test_preserve_dns_config_with_empty_state(setup_ipv4_ipv6_name_server):
     old_state = setup_ipv4_ipv6_name_server
 
-    libnmstate.apply({Interface.KEY: []})
+    apply_with_description("Apply the empty state", {Interface.KEY: []})
     current_state = libnmstate.show()
 
     assert old_state[DNS.KEY][DNS.CONFIG] == current_state[DNS.KEY][DNS.CONFIG]
@@ -288,7 +314,10 @@ def test_add_non_canonicalized_ipv6_nameserver():
             DNS.CONFIG: dns_config,
         },
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Empty the DNS server, keep the default settings on interface and route",
+        desired_state,
+    )
 
     current_state = libnmstate.show()
     assert "2000::100" in current_state[DNS.KEY][DNS.CONFIG][DNS.SERVER]
@@ -380,9 +409,12 @@ def static_dns(eth1_up):
             }
         },
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure the DNS sever 2001:4860:4860::8888 and 8.8.8.8, keep the default interface and route settings",
+        desired_state,
+    )
     yield desired_state
-    libnmstate.apply({DNS.KEY: {DNS.CONFIG: {}}})
+    apply_with_description("Clear the DNS config", {DNS.KEY: {DNS.CONFIG: {}}})
 
 
 @pytest.mark.tier1
@@ -390,7 +422,9 @@ def test_change_dns_search_only(static_dns):
     desired_state = {
         DNS.KEY: {DNS.CONFIG: {DNS.SEARCH: EXAMPLE_SEARCHES2}},
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set the DNS search to 'example.info' and 'example.org'", desired_state
+    )
     current_state = libnmstate.show()
     assert current_state[DNS.KEY][DNS.CONFIG] == {
         DNS.SERVER: [IPV6_DNS_NAMESERVERS[0], IPV4_DNS_NAMESERVERS[0]],
@@ -406,7 +440,10 @@ def test_change_dns_server_only(static_dns):
             }
         },
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure the DNS sever 2001:4860:4860::8888 and 8.8.8.8",
+        desired_state,
+    )
     current_state = libnmstate.show()
     assert current_state[DNS.KEY][DNS.CONFIG] == {
         DNS.SERVER: [IPV6_DNS_NAMESERVERS[1], IPV4_DNS_NAMESERVERS[1]],
@@ -451,13 +488,15 @@ def test_move_dns_from_port_to_controller(static_dns, eth2_up):
         state[Interface.KEY][0][Interface.IPV6] = static_dns[Interface.KEY][0][
             Interface.IPV6
         ]
-        libnmstate.apply(state)
+        apply_with_description("Configure the DNS", state)
         current_state = libnmstate.show()
 
         assertlib.assert_state_match(state)
         assert state[DNS.KEY][DNS.CONFIG] == current_state[DNS.KEY][DNS.CONFIG]
         # Remove DNS before deleting bond
-        libnmstate.apply({DNS.KEY: {DNS.CONFIG: {}}})
+        apply_with_description(
+            "Empty the DNS config", {DNS.KEY: {DNS.CONFIG: {}}}
+        )
 
 
 def test_changed_dns_from_port_to_controller(static_dns, eth2_up):
@@ -477,13 +516,15 @@ def test_changed_dns_from_port_to_controller(static_dns, eth2_up):
         state[Interface.KEY][0][Interface.IPV6] = static_dns[Interface.KEY][0][
             Interface.IPV6
         ]
-        libnmstate.apply(state)
+        apply_with_description("Change the DNS from port to controller", state)
         current_state = libnmstate.show()
 
         assertlib.assert_state_match(state)
         assert state[DNS.KEY][DNS.CONFIG] == current_state[DNS.KEY][DNS.CONFIG]
         # Remove DNS before deleting bond
-        libnmstate.apply({DNS.KEY: {DNS.CONFIG: {}}})
+        apply_with_description(
+            "Remove the DNS config", {DNS.KEY: {DNS.CONFIG: {}}}
+        )
 
 
 def test_uncompare_dns_servers(static_dns):
@@ -497,7 +538,10 @@ def test_uncompare_dns_servers(static_dns):
         """,
         Loader=yaml.SafeLoader,
     )
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Configure the DNS server to 2001:Db8:0:0:0:0:0:1 and ::fFfF:192.0.2.1",
+        desired_state,
+    )
     current_state = libnmstate.show()
     assert "2001:db8::1" in current_state[DNS.KEY][DNS.CONFIG][DNS.SERVER]
     assert "::ffff:192.0.2.1" in current_state[DNS.KEY][DNS.CONFIG][DNS.SERVER]
@@ -515,7 +559,9 @@ def test_set_and_remove_dns_options(static_dns):
         """,
         Loader=yaml.SafeLoader,
     )
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set the DNS options to rotate and debug", desired_state
+    )
     current_state = libnmstate.show()
     assert "rotate" in current_state[DNS.KEY][DNS.CONFIG][DNS.OPTIONS]
     assert "debug" in current_state[DNS.KEY][DNS.CONFIG][DNS.OPTIONS]
@@ -557,7 +603,9 @@ def test_set_dns_option_with_value(static_dns):
         """,
         Loader=yaml.SafeLoader,
     )
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set the DNS options to rotate, debug, ndots:9", desired_state
+    )
     current_state = libnmstate.show()
     assert "ndots:9" in current_state[DNS.KEY][DNS.CONFIG][DNS.OPTIONS]
 
@@ -587,7 +635,9 @@ def static_dns_with_options(static_dns):
             }
         },
     }
-    libnmstate.apply(desired_state)
+    apply_with_description(
+        "Set the DNS options to debug, rotate", desired_state
+    )
 
 
 def test_remove_all_dns_options(static_dns_with_options):
@@ -600,7 +650,7 @@ def test_remove_all_dns_options(static_dns_with_options):
             }
         },
     }
-    libnmstate.apply(desired_state)
+    apply_with_description("Remove the DNS config", desired_state)
 
     current_state = libnmstate.show()
     assert DNS.OPTIONS not in current_state[DNS.KEY][DNS.CONFIG]
@@ -616,7 +666,7 @@ def test_remove_all_dns_options(static_dns_with_options):
 
 def test_purge_dns_full_config(static_dns_with_options):
     desired_state = {DNS.KEY: {DNS.CONFIG: {}}}
-    libnmstate.apply(desired_state)
+    apply_with_description("Remove the DNS config", desired_state)
 
     current_state = libnmstate.show()
     assert not current_state[DNS.KEY][DNS.CONFIG]
@@ -624,7 +674,7 @@ def test_purge_dns_full_config(static_dns_with_options):
 
 def test_purge_dns_with_empty_server_and_search(static_dns):
     desired_state = {DNS.KEY: {DNS.CONFIG: {DNS.SERVER: [], DNS.SEARCH: []}}}
-    libnmstate.apply(desired_state)
+    apply_with_description("Remove the DNS config", desired_state)
 
     current_state = libnmstate.show()
     assert not current_state[DNS.KEY][DNS.CONFIG]
@@ -649,7 +699,11 @@ def test_kernel_mode_dns_and_purge():
         """
     )
     with disable_service("NetworkManager"):
-        libnmstate.apply(desired_state, kernel_only=True)
+        apply_with_description(
+            "Set the DNS dns search to example.com and example.org, set the dns server to 2001:4860:4860::8888, 2001:4860:4860::8844, 8.8.4.4, and 8.8.8.8,  set the dns options to debug and rotate",
+            desired_state,
+            kernel_only=True,
+        )
         cur_state = libnmstate.show(kernel_only=True)
         assert (
             cur_state[DNS.KEY][DNS.CONFIG]
@@ -666,6 +720,8 @@ def test_kernel_mode_dns_and_purge():
               config: {}
             """
         )
-        libnmstate.apply(desired_state, kernel_only=True)
+        apply_with_description(
+            "Remove the DNS config", desired_state, kernel_only=True
+        )
         cur_state = libnmstate.show(kernel_only=True)
         assert not cur_state[DNS.KEY][DNS.CONFIG]
