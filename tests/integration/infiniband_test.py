@@ -35,6 +35,7 @@ from libnmstate.schema import LinuxBridge
 
 from .testlib import assertlib
 from .testlib import statelib
+from .testlib.apply import apply_with_description
 from .testlib.bondlib import bond_interface
 from .testlib.bridgelib import linux_bridge
 from .testlib.bridgelib import add_port_to_bridge
@@ -109,7 +110,9 @@ def _gen_ib_iface_info(
 @pytest.fixture
 def ib_base_nic():
     iface_info = _gen_ib_iface_info(_test_nic_name(), mode=_test_ib_mode())
-    libnmstate.apply({Interface.KEY: [iface_info]})
+    apply_with_description(
+        "Apply the interface info", {Interface.KEY: [iface_info]}
+    )
     yield iface_info
     iface_info[Interface.STATE] = InterfaceState.ABSENT
     libnmstate.apply(
@@ -126,7 +129,8 @@ def ib_pkey_nic1(ib_base_nic):
     libnmstate.apply({Interface.KEY: [iface_info]})
     yield iface_info
     iface_info[Interface.STATE] = InterfaceState.ABSENT
-    libnmstate.apply(
+    apply_with_description(
+        "Delete the infiniband interface",
         {Interface.KEY: [iface_info]},
         verify_change=False,
     )
@@ -140,7 +144,8 @@ def ib_pkey_nic2(ib_base_nic):
     libnmstate.apply({Interface.KEY: [iface_info]})
     yield iface_info
     iface_info[Interface.STATE] = InterfaceState.ABSENT
-    libnmstate.apply(
+    apply_with_description(
+        "Delete the infiniband interface",
         {Interface.KEY: [iface_info]},
         verify_change=False,
     )
@@ -295,7 +300,10 @@ class TestInfiniBand:
             desired_state[Interface.KEY][0][Bond.CONFIG_SUBTREE][
                 Bond.MODE
             ] = BondMode.ACTIVE_BACKUP
-            libnmstate.apply(desired_state)
+            apply_with_description(
+                "Set the bonding mode to active-backup for bond99",
+                desired_state,
+            )
             assertlib.assert_state_match(desired_state)
 
     def test_add_pkey_nic_to_active_backup_bond(
@@ -312,7 +320,10 @@ class TestInfiniBand:
             desired_state[Interface.KEY][0][Bond.CONFIG_SUBTREE][
                 Bond.MODE
             ] = BondMode.ACTIVE_BACKUP
-            libnmstate.apply(desired_state)
+            apply_with_description(
+                "Set the bonding mode to active-backup for bond99",
+                desired_state,
+            )
             assertlib.assert_state_match(desired_state)
 
     def test_expect_exception_when_adding_base_nic_to_round_robin_bond(
