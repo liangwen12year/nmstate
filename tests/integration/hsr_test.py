@@ -9,6 +9,7 @@ from libnmstate.schema import InterfaceType
 from libnmstate.schema import Hsr
 
 from .testlib import assertlib
+from .testlib.apply import apply_with_description
 from .testlib.env import is_el8
 from .testlib.env import nm_minor_version
 
@@ -40,10 +41,13 @@ def test_add_hsr_and_remove(eth1_up, eth2_up):
         ]
     }
     try:
-        libnmstate.apply(desired_state)
+        apply_with_description(
+            "Bring up the hsr0 interface, set the config port to eth1 and eth2, set the hsr multicast spec to 40, set the hsr protocol to prp",
+            desired_state,
+        )
         assertlib.assert_state_match(desired_state)
     finally:
         desired_state[Interface.KEY][0][
             Interface.STATE
         ] = InterfaceState.ABSENT
-        libnmstate.apply(desired_state)
+        apply_with_description("Delete the hsr0 device", desired_state)
