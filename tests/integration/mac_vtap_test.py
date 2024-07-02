@@ -99,4 +99,6 @@ def macvtap_interface(ifname, mode, promiscuous):
         yield d_state
     finally:
         d_state[Interface.KEY][0][Interface.STATE] = InterfaceState.ABSENT
-        apply_with_description("Delete the MacVtap interface {}".format(ifname), d_state)
+        apply_with_description(
+            "Delete the MacVtap interface {}".format(ifname), d_state
+        )
